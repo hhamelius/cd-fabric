@@ -1,15 +1,23 @@
 from fabric.api import run, env, local, lcd, cd, put
 from fabric.decorators import task, runs_once
 
-env.hosts = ['henham@172.16.54.128']
+env.hosts = ['henham@172.16.54.129']
+tomcat_home='/opt/generic_tomcat'
+tomcat_script='/etc/init.d/generic_tomcat'
+
 releasesDir = '/tmp/localReleases'
 targetDir = '/tmp/targetReleases'
 
 @task
 @runs_once
 def deploy(group, webapp, version):
-	print 'hepp'
-	#fetch_artifacts()
+	local(fetch_artifacts(group, webapp, version))
+	local(update_artifact(webapp))
+	local(push_artifacts(webapp, version))
+	run(tomcat('stop'))
+	run(undeploy(webappp))
+	run(deploy_artifact(webapp))
+	run(tomcat('start'))
 
 #------- Fetch artifacts -------#
 @task
@@ -45,26 +53,14 @@ def push_artifacts(webapp, version):
 	warfile = '{0}/{1}-{2}.war'.format(releasesDir, webapp, version)
 	put(warfile, targetDir)
 
-#------ Restart Tomcat -------#
-tomcat_home='not set'
-
-@task
-def get_tomcat_home():
-	tomcat_home = run('echo $TOMCAT_HOME')
-
-def stop_tomcat():
-	with cd(tomcat_home):
-		run('./init.tomcat stop $TOMCAT_HOME')
-
-def start_tomcat():
-	with cd(TOMCAT_HOME):
-		run('./init.tomcat start', pty=False)
+#------- Restart Tomcat -------#
+def tomcat(action):
+	run('{0} {1}'.format(tomcat_script, action))
 
 def undeploy(webapp):
 	run('rm -rf {0}/webapps/{1}'.format(tomcat_home, webapp)
 	run('rm {0}/webapps/{1}.war'.format(tomcat_home, webapp)
 	run('rm -rf {0}/work/Catalina/localhost/{1}'.format(tomcat_home, webapp)	
 
-#put('/tmp/assets.tgz', '/tmp/assets.tgz')
-#    with cd('/var/www/myapp/'):
-#        run('tar xzf /tmp/assets.tgz')
+def deploy_artifact(webapp):
+	cp(targetDir, '{0}/webapps/'.format(tomcat_home)
