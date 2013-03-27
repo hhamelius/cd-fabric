@@ -16,4 +16,6 @@ end
 template = ERB.new(text, 0, "%<>")
 
 result = template.result
-puts result
+File.open('/tmp/hockey-web_generated.properties', 'w') do |f|
+	f.puts result
+end

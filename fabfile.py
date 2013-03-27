@@ -1,64 +1,52 @@
-from fabric.api import run, env, local, lcd, cd, put
+from fabric.api import run, env, local, lcd, cd, put, sudo
 from fabric.decorators import task, runs_once
 
-env.hosts = ['henham@172.16.54.129']
-tomcat_home='/opt/generic_tomcat'
-tomcat_script='/etc/init.d/generic_tomcat'
+#env.hosts = ['henham@172.16.54.129'] # -H
+#tomcat_name = 'generic_tomcat'       # argv
 
+tomcat_home='/opt/{0}'.format(env.tomcat_name)
+tomcat_script='/etc/init.d/{0}'.format(env.tomcat_name)
+app_lib='opt/{0}/lib'.format(env.tomcat_name)
 releasesDir = '/tmp/localReleases'
 
+#------- Main Deploy Task -------#
 @task
 def deploy(group, webapp, version):
-	run(fetch_nexus_artifact(group, webapp, version))
-	run(fetch_properties(webapp))
+	# trigger a puppet update
+	#sudo('puppet agent -t --confdir /etc/ab/puppet')
+	sudo('puppet apply --modulepath /puppet/puppet/modules /puppet/puppet/manifests/site.pp --certname ab-generic-app1.aftonbladet.se')
+	fetch_nexus_artefact(group, webapp, version)
 
-	run(tomcat('stop'))
-	run(deploy_properties(webapp))  # puts it in tomcta classpath
-	run(redeploy_artifact(webappp))
-	run(tomcat('start'))
+	tomcat('stop')
+	deploy_properties(webapp)  # put props into tomcat classpath
+	redeploy_artifact(webapp, version)
+	tomcat('start')
 
 #------- Fetch artifacts -------#	
 def fetch_nexus_artefact(group, artifact, version):
 	grp=group.replace('.','/')
 	warfile = '{0}-{1}.war'.format(artifact, version)
-	get_war_command = 'wget http://maven-repo.aftonbladet.se:8081/nexus/content/repositories/releases/{0}/{1}/{2}/{3}'.format(grp, artifact, version, warfile)
-	with lcd(releasesDir):
-		local(get_war_command)
-
-def fetch_properties(webapp):
-    # TODO mock implementation, needs proper implementation
-	local('mkdir -p {0}/WEB-INF/classes'.format(releasesDir))
-	local('cp hockey-web.properties {0}/WEB-INF/classes'.format(releasesDir))
+	run('mkdir -p {0}'.format(releasesDir))
+	run('wget http://maven-repo.aftonbladet.se:8081/nexus/content/repositories/releases/{0}/{1}/{2}/{3} -O {4}/{3}'.format(grp, artifact, version, warfile, releasesDir))
 
 #------- Update artifact -------#
 @task
-def deploy_properties(webapp)
-	run('cp {0}/{1}.properties {2}/lib/'.format(releasesDir, webapp, tomcat_home))
-
-def inject_properties(webapp):		
-	update_command = 'jar -uf {0} -C WEB-INF/classes /tmp/{0}.properties'.format(webapp)
-	with lcd(releasesDir):
-		local(update_command)
-
-#------- Push artifacts -------#
-@task
-def push_artifacts(webapp, version):
-	run('mkdir -p {0}'.format(targetDir))
-	warfile = '{0}/{1}-{2}.war'.format(releasesDir, webapp, version)
-	put(warfile, targetDir)
+def deploy_properties(webapp):
+	sudo( 'cp /home/wwwadm/properties/{0}.properties_latest /home/wwwadm/properties/{0}.properties'.format(webapp, app_lib) )
 
 #------- Restart Tomcat -------#
 def tomcat(action):
-	run('{0} {1}'.format(tomcat_script, action))
+	sudo('{0} {1}'.format(tomcat_script, action))
 
-def redeploy_artifact(webapp)
+# ------ Deploy/Undeploy Artifact -------#
+def redeploy_artifact(webapp, version):
 	undeploy_artifact(webapp)
-	deploy_artifact(webapp)
+	deploy_artifact(webapp, version)
 
 def undeploy_artifact(webapp):
-	run('rm -rf {0}/webapps/{1}'.format(tomcat_home, webapp)
-	run('rm {0}/webapps/{1}.war'.format(tomcat_home, webapp)
-	run('rm -rf {0}/work/Catalina/localhost/{1}'.format(tomcat_home, webapp)	
+	sudo('if [ -f {0}/webapps/{1} ]; then rm {0}/webapps/{1}; fi'.format(tomcat_home, webapp))
+	sudo('if [ -d {0}/webapps/{1} ]; then rm {0}/webapps/{1}.war; fi'.format(tomcat_home, webapp))
+	sudo('if [ -d {0}/work/Catalina/localhost/{1} ]; then rm -rf {0}/work/Catalina/localhost/{1}; fi'.format(tomcat_home, webapp))
 
-def deploy_artifact(webapp):
-	cp(targetDir, '{0}/webapps/'.format(tomcat_home)
+def deploy_artifact(webapp, version):
+	sudo('cp {0}/{1}-{2}.war {3}/webapps/{1}.war'.format(releasesDir, webapp, version, tomcat_home))
