@@ -27,7 +27,8 @@ def fetch_nexus_artefact(group, artifact, version):
 	grp=group.replace('.','/')
 	warfile = '{0}-{1}.war'.format(artifact, version)
 	run('mkdir -p {0}'.format(releasesDir))
-	run('wget http://maven-repo.aftonbladet.se:8081/nexus/content/repositories/releases/{0}/{1}/{2}/{3} -O {4}/{3}'.format(grp, artifact, version, warfile, releasesDir))
+	run('wget http://maven-repo.aftonbladet.se:8081/nexus/content/repositories/releases/{0}/{1}/{2}/{3} -O {4}/{3}'
+		.format(grp, artifact, version, warfile, releasesDir))
 
 #------- Update artifact -------#
 @task
