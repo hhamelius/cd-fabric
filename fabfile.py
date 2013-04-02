@@ -1,24 +1,25 @@
 from fabric.api import run, env, local, lcd, cd, put, sudo
 from fabric.decorators import task, runs_once
 
-#env.hosts = ['henham@172.16.54.129'] # -H
-#tomcat_name = 'generic_tomcat'       # argv
+#default to tomcat as tomcat_name
+tomcat_name = 'tomcat'
+if (env.tomcat_name): 
+	tomcat_name = env.tomcat_name
 
-tomcat_home='/opt/{0}'.format(env.tomcat_name)
-tomcat_script='/etc/init.d/{0}'.format(env.tomcat_name)
-app_lib='opt/{0}/lib'.format(env.tomcat_name)
+tomcat_home='/opt/{0}'.format(tomcat_name)
+tomcat_script='/etc/init.d/{0}'.format(tomcat_name)
+app_lib='opt/{0}/lib'.format(tomcat_name)
 releasesDir = '/tmp/localReleases'
-
+	
 #------- Main Deploy Task -------#
 @task
-def deploy(group, webapp, version):
-	# trigger a puppet update
+def deploy(group, webapp, version, *resources):
 	#sudo('puppet agent -t --confdir /etc/ab/puppet')
 	sudo('puppet apply --modulepath /puppet/puppet/modules /puppet/puppet/manifests/site.pp --certname ab-generic-app1.aftonbladet.se')
 	fetch_nexus_artefact(group, webapp, version)
-
 	tomcat('stop')
-	deploy_properties(webapp)  # put props into tomcat classpath
+	for resource in resources:
+		deploy_resource(webapp, resource)  # put properties or other resources into tomcat classpath
 	redeploy_artifact(webapp, version)
 	tomcat('start')
 
@@ -30,10 +31,10 @@ def fetch_nexus_artefact(group, artifact, version):
 	run('wget http://maven-repo.aftonbladet.se:8081/nexus/content/repositories/releases/{0}/{1}/{2}/{3} -O {4}/{3}'
 		.format(grp, artifact, version, warfile, releasesDir))
 
-#------- Update artifact -------#
-@task
-def deploy_properties(webapp):
-	sudo( 'cp /home/wwwadm/properties/{0}.properties_latest /home/wwwadm/properties/{0}.properties'.format(webapp, app_lib) )
+#------- Update resource -------#
+def deploy_resource(webapp, resource):
+	sudo( 'if [ -f /{1}/{0} ]; then rm /{1}/{0}; fi'.format(resource, app_lib))
+	sudo( 'ln -s /home/wwwadm/resources/{2}_{0}_latest /{1}/{0}'.format(resource, app_lib, webapp) )
 
 #------- Restart Tomcat -------#
 def tomcat(action):
